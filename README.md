@@ -73,13 +73,21 @@ python clip.py --file "C:\videos\gameplay.mp4" --test --clip-len 30
 
 ## Preview motion overlays
 
-The optional `motion_renderer.py` command applies a locally rendered FFmpeg/ASS motion overlay to a video. It is independent of the capture workflow and adds no Python or paid dependencies. `clean` is a restrained title-card style; `gta` adds neon HUD corner marks. Choose a title that accurately describes the footage:
+The optional `motion_renderer.py` command renders reusable Remotion/React overlays, then composites them with FFmpeg. `clean` is a restrained title-card style; `gta` adds animated neon HUD corner marks. To install the local renderer:
 
 ```powershell
-python motion_renderer.py "C:\videos\gameplay.mp4" "test_out\motion-preview.mp4" --title "GTA HIGHLIGHT" --start 15 --duration 20 --style gta
+Set-Location motion
+npm ci
+Set-Location ..
 ```
 
-This preview renderer adds an animated opening title and progress rail. Add `--whisper-captions` to generate local word-timed captions with the existing `faster-whisper` dependency; use `--captions-only` when adding captions to a video that already has a motion overlay. It does not change the existing `clip.py` rendering path.
+Render a clip with local Whisper word timings:
+
+```powershell
+python motion_renderer.py "C:\videos\gameplay.mp4" "test_out\motion-preview.mp4" --title "GTA HIGHLIGHT" --start 15 --duration 20 --style gta --whisper-captions
+```
+
+Remotion renders the transparent motion layer with one worker; FFmpeg composites it with the footage and original audio. Add `--renderer ffmpeg` for the low-memory ASS fallback, or `--captions-only` when adding Whisper captions to footage that already has a motion overlay. This command does not change the existing `clip.py` rendering path.
 
 ## Schedule to YouTube + Instagram
 

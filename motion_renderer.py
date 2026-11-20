@@ -1,9 +1,12 @@
-"""Render a short social-video overlay with FFmpeg and local ASS graphics.
+"""Render an opt-in Remotion overlay, add Whisper captions, and composite with FFmpeg.
 
-This is an opt-in renderer prototype. It does not alter clip.py or publishing.
+The existing clip.py and publishing workflows remain independent of this renderer.
 """
 import argparse
+import json
 import os
+import re
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -25,6 +28,8 @@ STYLES = {
         "kicker": "CLIP HIGHLIGHT",
     },
 }
+HERE = Path(__file__).resolve().parent
+MOTION_DIR = HERE / "motion"
 
 
 def _ass_time(seconds):
@@ -103,14 +108,13 @@ def _merge_caption_events(motion_ass, caption_ass):
     return merged + "\n" + "\n".join(dialogue_lines) + "\n"
 
 
-def _make_whisper_captions(source, start, duration, out_dir):
-    """Transcribe the selected interval locally and return existing clipper caption events."""
-    from clip import WordTimings, load_audio, whisper_words, write_ass
+def _transcribe_words(source, start, duration, out_dir):
+    """Transcribe the selected interval locally using the clipper's cached Whisper model."""
+    from clip import WordTimings, load_audio, whisper_words
 
     with tempfile.NamedTemporaryFile(suffix=".wav", prefix="motion-audio-", dir=out_dir,
                                      delete=False) as wav_file:
         wav_path = Path(wav_file.name)
-    cap_path = wav_path.with_suffix(".ass")
     try:
         extract = subprocess.run([
             "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{start:.3f}",
@@ -120,38 +124,147 @@ def _make_whisper_captions(source, start, duration, out_dir):
         if extract.returncode:
             raise RuntimeError(extract.stderr[-1500:] or "Could not extract audio for Whisper")
         words = whisper_words(load_audio(str(wav_path)))
-        write_ass(str(cap_path), WordTimings(
+        words = WordTimings(
             words, getattr(words, "spoken_language", "unknown"),
             getattr(words, "caption_language", "English"),
             getattr(words, "caption_fallback_reason", None),
-        ), 0, duration, None, caption_margin_v=220)
-        caption_data = cap_path.read_text(encoding="utf-8")
-        language = getattr(words, "caption_language", "English")
-        print(f"Whisper: {len(words)} word timings, caption language {language}")
-        return caption_data
+        )
+        print(f"Whisper: {len(words)} word timings, caption language "
+              f"{getattr(words, 'caption_language', 'English')}")
+        return words
     finally:
         wav_path.unlink(missing_ok=True)
-        cap_path.unlink(missing_ok=True)
+
+
+def _captions_ass(words, duration, out_dir):
+    from clip import write_ass
+
+    with tempfile.NamedTemporaryFile(suffix=".ass", prefix="motion-captions-", dir=out_dir,
+                                     delete=False) as caption_file:
+        caption_path = Path(caption_file.name)
+    try:
+        write_ass(str(caption_path), words, 0, duration, None, caption_margin_v=220)
+        return caption_path.read_text(encoding="utf-8")
+    finally:
+        caption_path.unlink(missing_ok=True)
+
+
+def _caption_groups(words, duration):
+    """Group Whisper word timings into short, non-overlapping caption phrases."""
+    from clip import mask_word
+
+    if getattr(words, "caption_language", "English") not in {"English", "Hinglish"}:
+        return []
+    inside = []
+    for start, end, word in words:
+        clean = mask_word(re.sub(r"[^\w'!?.,-]", "", word)).upper()
+        if clean and 0 <= start < duration:
+            inside.append((float(start), min(float(end), duration), clean))
+    groups, group = [], []
+    for item in inside:
+        if group:
+            previous = group[-1]
+            phrase_length = sum(len(part[2]) + 1 for part in group) + len(item[2])
+            if item[0] - previous[1] > 0.6 or len(group) >= 3 or phrase_length > 18 or re.search(r"[.!?]$", previous[2]):
+                groups.append(group)
+                group = []
+        group.append(item)
+    if group:
+        groups.append(group)
+    result = []
+    for index, phrase in enumerate(groups):
+        phrase_end = min(float(duration), phrase[-1][1] + 0.35)
+        if index + 1 < len(groups):
+            phrase_end = min(phrase_end, groups[index + 1][0][0])
+        chars = sum(len(item[2]) for item in phrase) + len(phrase) - 1
+        result.append({
+            "start": phrase[0][0],
+            "end": phrase_end,
+            "fontSize": max(46, min(68, int(1050 / (0.74 * max(1, chars))))),
+            "words": [{"start": start, "end": end, "text": text} for start, end, text in phrase],
+        })
+    return result
+
+
+def _render_remotion_overlay(props, overlay_path):
+    node = shutil.which("node")
+    renderer_script = MOTION_DIR / "render-overlay.mjs"
+    if not node or not renderer_script.is_file():
+        raise RuntimeError("Remotion project files are missing.")
+    if not (MOTION_DIR / "node_modules").is_dir():
+        raise RuntimeError("Remotion dependencies are not installed; run `cd motion; npm ci` first.")
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", prefix="motion-props-",
+                                     dir=overlay_path.parent, delete=False) as props_file:
+        json.dump(props, props_file, ensure_ascii=False)
+        props_path = Path(props_file.name)
+    try:
+        result = subprocess.run([node, str(renderer_script), str(props_path), str(overlay_path)],
+                                cwd=MOTION_DIR, capture_output=True, text=True)
+        if result.returncode:
+            raise RuntimeError(result.stderr[-2500:] or result.stdout[-2500:] or "Remotion render failed")
+    finally:
+        props_path.unlink(missing_ok=True)
+
+
+def _composite_remotion(source, target, overlay_path, start, duration):
+    graph = (
+        "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1[base];"
+        "[1:v]format=rgba[overlay];[base][overlay]overlay=0:0:shortest=1:format=auto[v]"
+    )
+    command = [
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{start:.3f}",
+        "-i", str(source), "-i", str(overlay_path), "-t", f"{duration:.3f}",
+        "-filter_complex", graph, "-map", "[v]", "-map", "0:a?", "-af", "asetpts=PTS-STARTPTS",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-threads", "2",
+        "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
+        str(target),
+    ]
+    result = subprocess.run(command, capture_output=True, text=True)
+    if result.returncode:
+        target.unlink(missing_ok=True)
+        raise RuntimeError(result.stderr[-2000:] or "FFmpeg composition failed")
 
 
 def render(input_path, output_path, title, start=0, duration=20, style="clean", whisper_captions=False,
-           captions_only=False):
+           captions_only=False, renderer="remotion"):
     source = Path(input_path).expanduser().resolve()
     target = Path(output_path).expanduser().resolve()
     if not source.is_file():
         raise FileNotFoundError(source)
     if start < 0 or duration <= 0:
         raise ValueError("start must be nonnegative and duration must be positive")
+    if renderer not in {"remotion", "ffmpeg"}:
+        raise ValueError("renderer must be 'remotion' or 'ffmpeg'")
     target.parent.mkdir(parents=True, exist_ok=True)
-    # FFmpeg resolves the ASS filter relative to cwd, avoiding Windows drive-letter escaping.
+    if renderer == "remotion" and not (MOTION_DIR / "node_modules").is_dir():
+        raise RuntimeError("Remotion dependencies are not installed; run `cd motion; npm ci` first.")
+    words = _transcribe_words(source, start, duration, target.parent) if whisper_captions else None
+
+    if renderer == "remotion":
+        with tempfile.TemporaryDirectory(prefix="motion-render-", dir=target.parent) as temp_dir:
+            overlay_path = Path(temp_dir) / "overlay.webm"
+            props = {
+                "title": title,
+                "style": style,
+                "durationSeconds": duration,
+                "fps": 30,
+                "width": 1080,
+                "height": 1920,
+                "captions": _caption_groups(words, duration) if words is not None else [],
+                "includeMotion": not captions_only,
+            }
+            _render_remotion_overlay(props, overlay_path)
+            _composite_remotion(source, target, overlay_path, start, duration)
+        return target
+
+    # FFmpeg/ASS stays available as a lower-memory fallback.
+    overlay_ass = build_ass(title, duration, style, include_motion=not captions_only)
+    if words is not None:
+        overlay_ass = _merge_caption_events(overlay_ass, _captions_ass(words, duration, target.parent))
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".ass", prefix="motion-",
                                      dir=target.parent, delete=False) as ass_file:
         ass_name = os.path.basename(ass_file.name)
     try:
-        overlay_ass = build_ass(title, duration, style, include_motion=not captions_only)
-        if whisper_captions:
-            caption_ass = _make_whisper_captions(source, start, duration, target.parent)
-            overlay_ass = _merge_caption_events(overlay_ass, caption_ass)
         Path(target.parent / ass_name).write_text(overlay_ass, encoding="utf-8")
         command = [
             "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{start:.3f}",
@@ -181,10 +294,12 @@ def main():
                         help="transcribe the selected range locally and burn in word-timed captions")
     parser.add_argument("--captions-only", action="store_true",
                         help="render Whisper captions without adding another title/HUD overlay")
+    parser.add_argument("--renderer", choices=("remotion", "ffmpeg"), default="remotion",
+                        help="Remotion motion overlays (default) or low-memory FFmpeg fallback")
     args = parser.parse_args()
     try:
         rendered = render(args.input, args.output, args.title, args.start, args.duration, args.style,
-                          args.whisper_captions, args.captions_only)
+                          args.whisper_captions, args.captions_only, args.renderer)
     except (OSError, ValueError, RuntimeError) as error:
         parser.error(str(error))
     print(rendered)
