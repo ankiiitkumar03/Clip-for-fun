@@ -87,7 +87,7 @@ Render a clip with local Whisper word timings:
 python motion_renderer.py "C:\videos\gameplay.mp4" "test_out\motion-preview.mp4" --title "GTA HIGHLIGHT" --start 15 --duration 20 --style gta --whisper-captions
 ```
 
-Remotion renders the transparent motion layer with one worker; FFmpeg composites it with the footage and original audio. Add `--renderer ffmpeg` for the low-memory ASS fallback, or `--captions-only` when adding Whisper captions to footage that already has a motion overlay. This command does not change the existing `clip.py` rendering path.
+Remotion renders a transparent ProRes 4444 layer with one worker; FFmpeg composites it with the footage and original audio. Add `--renderer ffmpeg` for the low-memory ASS fallback, or `--captions-only` when adding Whisper captions to footage that already has a motion overlay. This command does not change the existing `clip.py` rendering path.
 
 ## Schedule to YouTube + Instagram
 

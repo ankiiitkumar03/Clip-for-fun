@@ -5,6 +5,8 @@ site/.dev.vars
 site/private/
 node_modules/
 motion/out/
+motion/.bundle-*/
+.remotion/
 __pycache__/
 *.py[cod]
 *.mp4

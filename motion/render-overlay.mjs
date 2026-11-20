@@ -10,23 +10,29 @@ if (!propsPath || !outputPath) {
 
 const inputProps = JSON.parse(await fs.readFile(propsPath, 'utf8'));
 const entryPoint = path.resolve('src/index.jsx');
-const serveUrl = await bundle({entryPoint});
-const composition = await selectComposition({
-  serveUrl,
-  id: 'MotionOverlay',
-  inputProps,
-});
+const bundleDir = await fs.mkdtemp(path.join(process.cwd(), '.bundle-'));
+try {
+  const serveUrl = await bundle({entryPoint, outDir: bundleDir});
+  const composition = await selectComposition({
+    serveUrl,
+    id: 'MotionOverlay',
+    inputProps,
+  });
 
-await renderMedia({
-  composition,
-  serveUrl,
-  codec: 'vp9',
-  outputLocation: path.resolve(outputPath),
-  inputProps,
-  concurrency: 1,
-  disallowParallelEncoding: true,
-  imageFormat: 'png',
-  pixelFormat: 'yuva420p',
-  muted: true,
-  logLevel: 'info',
-});
+  await renderMedia({
+    composition,
+    serveUrl,
+    codec: 'prores',
+    proResProfile: '4444',
+    outputLocation: path.resolve(outputPath),
+    inputProps,
+    concurrency: 1,
+    disallowParallelEncoding: true,
+    imageFormat: 'png',
+    pixelFormat: 'yuva444p10le',
+    muted: true,
+    logLevel: 'info',
+  });
+} finally {
+  await fs.rm(bundleDir, {recursive: true, force: true});
+}

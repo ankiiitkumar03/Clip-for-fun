@@ -242,7 +242,7 @@ def render(input_path, output_path, title, start=0, duration=20, style="clean", 
 
     if renderer == "remotion":
         with tempfile.TemporaryDirectory(prefix="motion-render-", dir=target.parent) as temp_dir:
-            overlay_path = Path(temp_dir) / "overlay.webm"
+            overlay_path = Path(temp_dir) / "overlay.mov"
             props = {
                 "title": title,
                 "style": style,
