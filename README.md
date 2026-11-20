@@ -73,21 +73,7 @@ python clip.py --file "C:\videos\gameplay.mp4" --test --clip-len 30
 
 ## Preview motion overlays
 
-The optional `motion_renderer.py` command renders reusable Remotion/React overlays, then composites them with FFmpeg. `clean` is a restrained title-card style; `gta` adds animated neon HUD corner marks. To install the local renderer:
-
-```powershell
-Set-Location motion
-npm ci
-Set-Location ..
-```
-
-Render a clip with local Whisper word timings:
-
-```powershell
-python motion_renderer.py "C:\videos\gameplay.mp4" "test_out\motion-preview.mp4" --title "GTA HIGHLIGHT" --start 15 --duration 20 --style gta --whisper-captions
-```
-
-Remotion renders a transparent ProRes 4444 layer with one worker; FFmpeg composites it with the footage and original audio. Add `--renderer ffmpeg` for the low-memory ASS fallback, or `--captions-only` when adding Whisper captions to footage that already has a motion overlay. This command does not change the existing `clip.py` rendering path.
+For Windows installation, rendering commands, templates, Whisper captions, and troubleshooting, see [docs/MOTION-RENDERING.md](docs/MOTION-RENDERING.md). This optional renderer does not change the existing `clip.py` or publishing workflows.
 
 ## Schedule to YouTube + Instagram
 
