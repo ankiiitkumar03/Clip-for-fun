@@ -1,26 +1,28 @@
 # GTA Auto Clipper
 
-Find high-energy moments in live gameplay and render full-screen 9:16 clips with pop-up captions: each word pops in yellow the moment it is spoken. The clipper runs on your computer. A separate Zernio command can schedule the finished clip to your connected YouTube and Instagram accounts.
+I built GTA Auto Clipper to find exciting moments in live gameplay and turn them into full-screen 9:16 clips. It adds short pop-up captions where each spoken word appears in yellow, and saves the finished video and its metadata on your computer.
+
+I also added an optional Remotion motion-graphics workflow for titles and gaming-style overlays. The original clipping workflow still works on its own. When a clip is ready, a separate command can schedule it to YouTube and Instagram through Zernio.
 
 The software is free and MIT-licensed. The optional AI workflow guide and prompt pack are a separate digital product.
 
-## What it does
+## What I built
 
-- Searches current YouTube live results for a phrase such as `GTA 6` and prints machine-readable JSON for AI agents.
-- Requires an explicit visual confirmation before live capture, so a discussion stream or facecam-only source is not silently treated as gameplay.
-- Records a live source in rolling chunks. By default it ranks moments by live-chat reactions, then falls back to audio and speech if chat is unavailable or has no messages for a chunk. Combined chat, audio, and speech scoring is also available.
-- Starts clips a few seconds before the detected highlight (6 seconds by default).
-- Captions English speech in English and Hindi speech in romanized Hinglish. Other or uncertain languages, including Hindi the recognizer returns in an unsupported script, have no captions. Captions are short one-line phrases (up to 3 words) at one fixed spot: each word pops in yellow when it is spoken, earlier words turn white, and the next phrase replaces the last one in the same place (never stacked). Source audio stays unchanged.
-- Places captions in the lower third of the visible gameplay panel instead of using one fixed position near the bottom of the full vertical canvas.
-- Fills the whole 9:16 screen with gameplay by default (`--layout fill`), centered on the player. It samples frames for facecams, shifts the crop away from a persistent side facecam, and in stacked portrait streams cuts out the facecam and fills the screen with the gameplay part. `--layout fit` keeps the old look: the full source in the middle over a blurred background.
-- Resets audio and video timestamps before burning the captions.
-- Masks swear words and sexual words in the burned-in captions (for example `s***`) so platforms do not limit the clip; the original audio is unchanged.
-- Saves MP4 and JSON metadata in `output/`. It never posts as part of clipping.
-- Schedules reviewed clips through Zernio by default. Optional unattended scheduling is available after account setup and with a standing source-rights policy; dry-run is the default.
+- Search YouTube Live for a phrase such as `GTA 6` and return candidates as JSON.
+- Require a visual gameplay check before live capture, so a title, discussion, or facecam-only stream is not mistaken for gameplay.
+- Record live video in rolling chunks and find likely highlights. Chat reactions are the default signal; when chat is unavailable or has no messages, the clipper falls back to audio and speech. Combined scoring is also available.
+- Include a lead-in before the detected moment (6 seconds by default), so the clip has context.
+- Make English captions for English speech and romanized Hinglish captions for Hindi speech. Uncertain or unsupported speech is left without captions. Captions are short, one-line phrases of up to three words at a fixed position. Each spoken word pops in yellow, earlier words turn white, and the next phrase replaces the previous one. The source audio stays unchanged.
+- Place captions in the lower third of the visible gameplay panel.
+- Fill the 9:16 frame with gameplay by default (`--layout fill`). The crop is centered on the player, can shift away from a persistent side facecam, and can isolate gameplay in stacked portrait streams. Use `--layout fit` to show the full source over a blurred background.
+- Reset audio and video timestamps before burning in captions.
+- Mask swear words and sexual words in captions (for example, `s***`) while leaving the audio unchanged.
+- Save MP4 clips and JSON metadata in `output/`. Clipping itself never posts anything.
+- Schedule reviewed clips through Zernio with a dry run by default. Unattended scheduling is optional and requires account setup and a standing source-rights policy.
 
 ## Install
 
-Requirements: Python 3.10+, FFmpeg in PATH, Node.js or Deno (yt-dlp needs a JavaScript runtime to read YouTube; the clipper uses Node automatically when Deno is missing), OpenCV for `--crop` face detection, and a stable connection for first-run speech-model downloads.
+You need Python 3.10 or newer, FFmpeg in `PATH`, and Node.js or Deno. `yt-dlp` needs a JavaScript runtime to read YouTube; the clipper uses Node automatically when Deno is missing. OpenCV is used for face detection with `--crop`. A stable internet connection is needed for first-run speech-model downloads.
 
 ```powershell
 python -m venv .venv
@@ -28,44 +30,42 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-For live-stream search and optional YouTube live-chat scoring, set a YouTube Data API key in the terminal. Keep keys out of prompts, source files, and GitHub:
+For live-stream search and optional YouTube live-chat scoring, set a YouTube Data API key in your terminal. Keep keys out of prompts, source files, and GitHub:
 
 ```powershell
 $env:YOUTUBE_API_KEY = "YOUR_YOUTUBE_DATA_API_KEY"
 python find_streams.py "GTA 6" --max 25 --json
 ```
 
-The YouTube API returns live search candidates in `viewCount` order. It is not a dependable ranking of current live viewers; open a candidate and confirm the stream before use.
+YouTube returns live search candidates in view-count order. That is not a reliable ranking of current concurrent viewers, so open and check a candidate before using it.
 
 ## Make clips
 
-Open the candidate stream and verify that actual GTA gameplay is visible in the video. A GTA title, thumbnail, or talking head is not enough. Then start capture and keep it running until you press Ctrl+C. The default is chat-first. If chat is unavailable or has no messages for a chunk, the clipper automatically uses audio and speech instead. The clipper writes each selected highlight to `output/`:
+Before recording, open the candidate and confirm that actual GTA gameplay is visible. A GTA title, thumbnail, or talking head is not enough. Then start capture; it keeps running until you press `Ctrl+C`. Chat is used first by default. If chat is unavailable or has no messages for a chunk, the clipper uses audio and speech instead. Highlights are saved to `output/`.
 
 ```powershell
 python clip.py "https://www.youtube.com/watch?v=VIDEO_ID" --gameplay-confirmed --max-seconds 0 --clip-len 30 --lead-in 6 --top 2
 ```
 
-Important options:
-
 | Option | Default | Purpose |
 | --- | ---: | --- |
 | `--max-seconds` | `0` | Capture duration; `0` runs until stopped |
 | `--chunk` | `90` | Analysis chunk size in seconds |
-| `--clip-len` | `30` | Rendered highlight length |
-| `--lead-in` | `6` | Seconds before the detected moment |
+| `--clip-len` | `30` | Length of each rendered highlight |
+| `--lead-in` | `6` | Seconds included before the detected moment |
 | `--top` | `1` | Highlights kept from each chunk |
 | `--gameplay-confirmed` | required for live capture | Confirm you inspected the stream and saw actual gameplay before recording |
 | `--min-score` | `2.5` | Minimum moment score |
-| `--layout` | `fill` | `fill`: gameplay covers the full 9:16 screen, facecams cropped out. `fit`: full source in the middle over a blurred background |
-| `--crop` | off | Old flag, same as `--layout fill` |
+| `--layout` | `fill` | `fill` covers the 9:16 screen with gameplay; `fit` shows the full source over a blurred background |
+| `--crop` | off | Older flag; same as `--layout fill` |
 | `--moment-source` | `chat` | Choose `chat`, `combined`, or `audio` for highlight selection |
-| `--spoken-language` | `auto` | `auto` detects the language and locks to Hindi (Hinglish captions) once a stream is clearly Hindi. `hi` / `en` force it for the whole stream |
+| `--spoken-language` | `auto` | Detect language and lock to Hindi (Hinglish captions) when the stream is clearly Hindi; use `hi` or `en` to force a language |
 | `--no-chat` | off | Skip live-chat collection and use audio and speech only |
-| `--output-dir` | `output/` | Custom destination folder |
+| `--output-dir` | `output/` | Choose another destination folder |
 
-Examples: `--moment-source chat` uses chat reactions first; `--moment-source combined` scores chat, audio, and speech together; `--moment-source audio` uses the original audio and speech method. Chat mode falls back to audio and speech when it has no chat data.
+With `--moment-source chat`, chat reactions are used first. `combined` scores chat, audio, and speech together. `audio` uses audio and speech only. Chat mode falls back to audio and speech when it has no chat data.
 
-Test a local video first. Test output goes to `test_out/` and cannot be published:
+To try a local video first, use test mode. Test clips go to `test_out/` and are not publishable:
 
 ```powershell
 python clip.py --file "C:\videos\gameplay.mp4" --test --clip-len 30
@@ -73,11 +73,11 @@ python clip.py --file "C:\videos\gameplay.mp4" --test --clip-len 30
 
 ## Preview motion overlays
 
-For Windows installation, rendering commands, templates, Whisper captions, and troubleshooting, see [docs/MOTION-RENDERING.md](docs/MOTION-RENDERING.md). This optional renderer does not change the existing `clip.py` or publishing workflows.
+I added an optional Remotion renderer for motion graphics. The Windows setup, rendering commands, templates, Whisper captions, and troubleshooting are in [docs/MOTION-RENDERING.md](docs/MOTION-RENDERING.md). This renderer is separate from the existing `clip.py` and publishing workflows.
 
-## Schedule to YouTube + Instagram
+## Schedule to YouTube and Instagram
 
-Connect your YouTube account and an Instagram Creator or Business account to Zernio. Set the key and account IDs as private environment variables:
+Connect your YouTube account and an Instagram Creator or Business account to Zernio. Set the key and account IDs in your private environment:
 
 ```powershell
 $env:ZERNIO_API_KEY = "YOUR_ZERNIO_API_KEY"
@@ -85,38 +85,28 @@ $env:ZERNIO_YOUTUBE_ACCOUNT_ID = "YOUR_YOUTUBE_ACCOUNT_ID"
 $env:ZERNIO_INSTAGRAM_ACCOUNT_ID = "YOUR_INSTAGRAM_ACCOUNT_ID"
 ```
 
-Review the clip and its JSON metadata, then mark the metadata `"approved": true`. Preview the schedule first:
+Review the clip and its JSON metadata, then set `"approved": true` in the metadata for the clip you want to publish. Preview the schedule first:
 
 ```powershell
 python zernio_publish.py "output\gta-CLIP-ID" --scheduled-for "2026-11-18T12:00:00+05:30"
 ```
 
-The dry run sends nothing. To schedule the post to both accounts, add `--publish`:
+The preview is a dry run and sends nothing. To schedule the approved clip to both accounts, add `--publish`:
 
 ```powershell
 python zernio_publish.py "output\gta-CLIP-ID" --scheduled-for "2026-11-18T12:00:00+05:30" --publish
 ```
 
-For unattended posting, first make sure the AI agent is restricted to sources you have the right to use and that you have tested its output. Then set `GTA_UNATTENDED_POSTS=1` in the machine's private environment and run with `--publish --unattended`. A scheduled post already accepted by Zernio can publish while your computer is asleep. Discovery and clip rendering still require an awake, connected runner.
+For unattended posting, first test the output and make sure the AI agent only uses sources you have the right to use. Then set `GTA_UNATTENDED_POSTS=1` in the machine's private environment and run with `--publish --unattended`. A post already accepted by Zernio can publish while your computer is asleep; discovering sources and rendering clips still require an awake, connected computer.
 
-`publish.py` is the same command as `zernio_publish.py`, but it also accepts the generic variable names `PUBLISH_API_KEY`, `PUBLISH_YOUTUBE_ACCOUNT_ID` and `PUBLISH_INSTAGRAM_ACCOUNT_ID`, so either spelling works: `python publish.py "output\gta-CLIP-ID" --publish --unattended --scheduled-for "FUTURE_ISO_TIME"`. To post to many channels with an equal share, use [GTA Auto Sender](https://github.com/AnIntellectualBeing/GTA-Auto-Sender).
+`publish.py` runs the same publisher as `zernio_publish.py` and also accepts the generic variable names `PUBLISH_API_KEY`, `PUBLISH_YOUTUBE_ACCOUNT_ID`, and `PUBLISH_INSTAGRAM_ACCOUNT_ID`. For example: `python publish.py "output\gta-CLIP-ID" --publish --unattended --scheduled-for "FUTURE_ISO_TIME"`. To post to many channels with an equal share, see [GTA Auto Sender](https://github.com/AnIntellectualBeing/GTA-Auto-Sender).
 
 The publisher stores the Zernio post ID and an idempotency key in the metadata. If an API call fails, check the Zernio dashboard before retrying.
 
-## Use with any AI assistant
-
-Copy [GTA-CLIPPING-PROMPT.txt](GTA-CLIPPING-PROMPT.txt) into ChatGPT, Claude, Gemini, or another AI assistant. The prompt itself needs no API key, plugin, or special setup. If your AI can access your video and run local tools, it can help operate the clipper; otherwise it will tell you what it can do and guide you one step at a time. Automatic clipping still needs the free tool installed. YouTube chat scoring uses the same optional YouTube API key as live search; without it, audio and speech scoring still works.
-
-For an AI that can access this project folder, [AI_WORKFLOW.md](AI_WORKFLOW.md) gives the detailed tool workflow. Never paste credentials into a prompt.
-
-## Rights and platform notes
-
-This release has no creator allowlist; the user chooses the source. You are responsible for obtaining rights and permissions to record, edit, and publish the footage. Creator credit does not replace permission. YouTube search ranking does not report a verified live concurrent-viewer leaderboard. This independent fan project is not affiliated with Rockstar Games, Take-Two Interactive, YouTube, Instagram, Meta, or Zernio.
-
 ## License
 
-MIT. See [LICENSE](LICENSE). No OpenShorts application code or AutoCrop-Vertical code is bundled in this focused release.
+This project is MIT-licensed. See [LICENSE](LICENSE). No OpenShorts application code or AutoCrop-Vertical code is bundled in this focused release.
 
-## Several streams, several AI agents, several channels
+## Working with several streams, AI agents, or channels
 
-See [docs/MULTI-AGENT.md](docs/MULTI-AGENT.md) for the roles (capture runner, checker, editor), running one capture per stream, the checker's veto rules, and the YouTube/Instagram daily limits. Posting to many channels with an equal share: [GTA Auto Sender](https://github.com/AnIntellectualBeing/GTA-Auto-Sender).
+See [docs/MULTI-AGENT.md](docs/MULTI-AGENT.md) for the capture runner, checker, and editor roles, running one capture per stream, the checker's veto rules, and YouTube and Instagram daily limits. For posting to many channels with an equal share, see [GTA Auto Sender](https://github.com/AnIntellectualBeing/GTA-Auto-Sender).
