@@ -1,12 +1,12 @@
 # GTA Auto Clipper
 
-I built GTA Auto Clipper to find exciting moments in live gameplay and turn them into full-screen 9:16 clips. It adds short pop-up captions where each spoken word appears in yellow, and saves the finished video and its metadata on your computer.
+SO built GTA Auto Clipper to find exciting moments in live gameplay and turn them into full-screen 9:16 clips. It adds short pop-up captions where each spoken word appears in yellow, and saves the finished video and its metadata on your computer.
 
 I also added an optional Remotion motion-graphics workflow for titles and gaming-style overlays. The original clipping workflow still works on its own. When a clip is ready, a separate command can schedule it to YouTube and Instagram through Zernio.
 
-The software is free and MIT-licensed. The optional AI workflow guide and prompt pack are a separate digital product.
 
-## What I built
+
+## What SO built
 
 - Search YouTube Live for a phrase such as `GTA 6` and return candidates as JSON.
 - Require a visual gameplay check before live capture, so a title, discussion, or facecam-only stream is not mistaken for gameplay.
