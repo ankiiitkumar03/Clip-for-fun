@@ -71,6 +71,16 @@ Test a local video first. Test output goes to `test_out/` and cannot be publishe
 python clip.py --file "C:\videos\gameplay.mp4" --test --clip-len 30
 ```
 
+## Preview motion overlays
+
+The optional `motion_renderer.py` command applies a locally rendered FFmpeg/ASS motion overlay to a video. It is independent of the capture workflow and adds no Python or paid dependencies. `clean` is a restrained title-card style; `gta` adds neon HUD corner marks. Choose a title that accurately describes the footage:
+
+```powershell
+python motion_renderer.py "C:\videos\gameplay.mp4" "test_out\motion-preview.mp4" --title "GTA HIGHLIGHT" --start 15 --duration 20 --style gta
+```
+
+This preview renderer adds an animated opening title and progress rail. Add `--whisper-captions` to generate local word-timed captions with the existing `faster-whisper` dependency; use `--captions-only` when adding captions to a video that already has a motion overlay. It does not change the existing `clip.py` rendering path.
+
 ## Schedule to YouTube + Instagram
 
 Connect your YouTube account and an Instagram Creator or Business account to Zernio. Set the key and account IDs as private environment variables:
